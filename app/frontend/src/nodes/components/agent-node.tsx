@@ -1,8 +1,12 @@
 import { type NodeProps } from '@xyflow/react';
 import { Bot } from 'lucide-react';
+import { useState } from 'react';
 
 import { CardContent } from '@/components/ui/card';
-import { type AgentNode } from '../types';
+import { useNodeStatus } from '@/contexts/node-context';
+import { NodeMessage, type AgentNode } from '../types';
+import { getStatusColor } from '../utils';
+import { AgentOutputDialog } from './agent-output-dialog';
 import { NodeShell } from './node-shell';
 
 export function AgentNode({
@@ -11,12 +15,24 @@ export function AgentNode({
   id,
   isConnectable,
 }: NodeProps<AgentNode>) {
+  const { nodeStates } = useNodeStatus();
+  const nodeData = nodeStates[id] || { 
+    status: 'IDLE', 
+    ticker: null, 
+    message: '', 
+    messages: [],
+    lastUpdated: 0
+  };
+  const status = nodeData.status;
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
   return (
     <NodeShell
       id={id}
       selected={selected}
       isConnectable={isConnectable}
       icon={<Bot className="h-5 w-5" />}
+      iconColor={getStatusColor(status)}
       name={data.name || "Agent"}
       description={data.description}
     >
@@ -27,18 +43,25 @@ export function AgentNode({
               Status
             </div>
 
-            <div className="bg-secondary text-foreground text-xs rounded p-2">
-              {data.status || 'Idle'}
+            <div className={`text-foreground text-xs rounded p-2 ${getStatusColor(status)}`}>
+              {status}
             </div>
+            
+            {nodeData.message && (
+              <div className="text-foreground text-subtitle">
+                {nodeData.message}
+                {nodeData.ticker && <span className="ml-1">({nodeData.ticker})</span>}
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="border-t border-border p-3 flex justify-end items-center">
-          <div className="flex items-center gap-1">
-            <div className="text-subtitle text-muted-foreground">Output</div>
-            <div className="text-subtitle text-muted-foreground">≡</div>
-          </div>
-        </div>
+        <AgentOutputDialog
+          isOpen={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          name={data.name || "Agent"}
+          messages={nodeData.messages as NodeMessage[]}
+        />
       </CardContent>
     </NodeShell>
   );
