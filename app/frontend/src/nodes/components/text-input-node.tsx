@@ -1,4 +1,4 @@
-import { useReactFlow, type NodeProps } from '@xyflow/react';
+import { getConnectedEdges, useReactFlow, type NodeProps } from '@xyflow/react';
 import { Bot, Play } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -7,22 +7,20 @@ import { CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { useNodeStatus } from '@/contexts/node-context';
 import { api } from '@/services/api';
-import { type StartNode } from '../types';
-import { getStatusColor } from '../utils';
+import { type TextInputNode } from '../types';
 import { NodeShell } from './node-shell';
 
-export function StartNode({
+export function TextInputNode({
   data,
   selected,
   id,
   isConnectable,
-}: NodeProps<StartNode>) {
+}: NodeProps<TextInputNode>) {
   const [tickers, setTickers] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const nodeStatusContext = useNodeStatus();
   const { resetAllNodes, nodeStates, updateNodeStatus } = nodeStatusContext;
-  const { getNodes } = useReactFlow();
-  const status = nodeStates[id]?.status || 'IDLE';
+  const { getNodes, getEdges } = useReactFlow();
   const abortControllerRef = useRef<(() => void) | null>(null);
   
   // Clean up SSE connection on unmount
@@ -55,15 +53,35 @@ export function StartNode({
     // Call the backend API with SSE
     const tickerList = tickers.split(',').map(t => t.trim());
     
-    // Get the select agents from the context and filter out the start node and portfolio_manager
-    const selectedAgents = getNodes()
-      .map(node => node.id as string)
-      .filter(Boolean);
+    // Get the nodes and edges
+    const nodes = getNodes();
+    const edges = getEdges();
+    const connectedEdges = getConnectedEdges(nodes, edges);
+    
+    // Get all nodes that are agents and are connected in the flow
+    const selectedAgents = new Set<string>();
+    
+    // First, collect all the target node IDs from connected edges
+    const connectedNodeIds = new Set<string>();
+    connectedEdges.forEach(edge => {
+      if (edge.source === id) {
+        connectedNodeIds.add(edge.target);
+      }
+    });
+    
+    // Then filter for nodes that are agents
+    nodes.forEach(node => {
+      if (node.type === 'agent' && connectedNodeIds.has(node.id)) {
+        selectedAgents.add(node.id);
+      }
+    });
+    
+    console.log(`Connected agents: `, Array.from(selectedAgents));
     
     abortControllerRef.current = api.runHedgeFund(
       {
         tickers: tickerList,
-        selected_agents: selectedAgents,
+        selected_agents: Array.from(selectedAgents),
       },
       (event) => {
         // Basic status updates for start node only (agent-specific updates are handled by the API)
@@ -87,7 +105,6 @@ export function StartNode({
       selected={selected}
       isConnectable={isConnectable}
       icon={<Bot className="h-5 w-5" />}
-      iconColor={getStatusColor(status)}
       name={data.name || "Custom Component"}
       description={data.description}
       hasLeftHandle={false}
