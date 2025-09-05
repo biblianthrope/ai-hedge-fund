@@ -4,7 +4,10 @@ from langchain_anthropic import ChatAnthropic
 from langchain_deepseek import ChatDeepSeek
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
+from langchain_xai import ChatXAI
+from langchain_openai import ChatOpenAI, AzureChatOpenAI
 from langchain_openai import ChatOpenAI
+from langchain_gigachat import GigaChat
 from langchain_ollama import ChatOllama
 from enum import Enum
 from pydantic import BaseModel
@@ -25,6 +28,9 @@ class ModelProvider(str, Enum):
     OPENAI = "OpenAI"
     OLLAMA = "Ollama"
     OPENROUTER = "OpenRouter"
+    GIGACHAT = "GigaChat"
+    AZURE_OPENAI = "Azure OpenAI"
+    XAI = "xAI"
 
 
 class LLMModel(BaseModel):
@@ -123,7 +129,7 @@ def get_models_list():
     ]
 
 
-def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | None:
+def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = None) -> ChatOpenAI | ChatGroq | ChatOllama | GigaChat | None:
     if model_provider == ModelProvider.GROQ:
         api_key = (api_keys or {}).get("GROQ_API_KEY") or os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -188,3 +194,39 @@ def get_model(model_name: str, model_provider: ModelProvider, api_keys: dict = N
                 }
             }
         )
+    elif model_provider == ModelProvider.XAI:
+        api_key = (api_keys or {}).get("XAI_API_KEY") or os.getenv("XAI_API_KEY")
+        if not api_key:
+            print(f"API Key Error: Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
+            raise ValueError("xAI API key not found. Please make sure XAI_API_KEY is set in your .env file or provided via API keys.")
+        return ChatXAI(model=model_name, api_key=api_key)
+    elif model_provider == ModelProvider.GIGACHAT:
+        if os.getenv("GIGACHAT_USER") or os.getenv("GIGACHAT_PASSWORD"):
+            return GigaChat(model=model_name)
+        else: 
+            api_key = (api_keys or {}).get("GIGACHAT_API_KEY") or os.getenv("GIGACHAT_API_KEY") or os.getenv("GIGACHAT_CREDENTIALS")
+            if not api_key:
+                print("API Key Error: Please make sure api_keys is set in your .env file or provided via API keys.")
+                raise ValueError("GigaChat API key not found. Please make sure GIGACHAT_API_KEY is set in your .env file or provided via API keys.")
+
+            return GigaChat(credentials=api_key, model=model_name)
+    elif model_provider == ModelProvider.AZURE_OPENAI:
+        # Get and validate API key
+        api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        if not api_key:
+            # Print error to console
+            print(f"API Key Error: Please make sure AZURE_OPENAI_API_KEY is set in your .env file.")
+            raise ValueError("Azure OpenAI API key not found.  Please make sure AZURE_OPENAI_API_KEY is set in your .env file.")
+        # Get and validate Azure Endpoint
+        azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        if not azure_endpoint:
+            # Print error to console
+            print(f"Azure Endpoint Error: Please make sure AZURE_OPENAI_ENDPOINT is set in your .env file.")
+            raise ValueError("Azure OpenAI endpoint not found.  Please make sure AZURE_OPENAI_ENDPOINT is set in your .env file.")
+        # get and validate deployment name
+        azure_deployment_name = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+        if not azure_deployment_name:
+            # Print error to console
+            print(f"Azure Deployment Name Error: Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
+            raise ValueError("Azure OpenAI deployment name not found.  Please make sure AZURE_OPENAI_DEPLOYMENT_NAME is set in your .env file.")
+        return AzureChatOpenAI(azure_endpoint=azure_endpoint, azure_deployment=azure_deployment_name, api_key=api_key, api_version="2024-10-21")
